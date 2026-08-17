@@ -3,7 +3,7 @@ import pandas as pd
 import datetime
 import io
 from docx import Document
-from docx.shared import Inches, Pt, RGBColor
+from docx.shared import Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 # ==========================================
@@ -36,92 +36,47 @@ if not st.session_state["logged_in"]:
                 st.error("Hatalı Kullanıcı Adı veya Şifre!")
     st.stop()
 
-# Veritabanı Hafızası
+# ==========================================
+# 2. HAMMADDELER & ANALİZ VERİTABANI
+# ==========================================
+# PDF'ten Okunan Hammadde Veri Tablosu
+RAW_MATERIALS_DATA = [
+    {"Kod": "10100004", "Ad": "Amino Asit", "Total N": 6.0, "Organic Matter": 95.0, "Free Aminoacids": 24.0},
+    {"Kod": "10100008", "Ad": "Amonyum Nitrat", "Total N": 33.0, "NH4-N": 16.5, "NO3-N": 16.5},
+    {"Kod": "10100233", "Ad": "Amonyum Polifosfat 18-58-0", "Total N": 18.0, "NH4-N": 18.0, "Total P2O5": 58.0},
+    {"Kod": "10100009", "Ad": "Amonyum Sülfat", "Total N": 21.0, "NH4-N": 21.0, "SO3": 60.0},
+    {"Kod": "10100021", "Ad": "Borik Asit", "Water Soluble B": 17.0},
+    {"Kod": "10100028", "Ad": "Çinko Edta %15", "Water Soluble Zn": 15.0},
+    {"Kod": "10100033", "Ad": "Çinko Sülfat Monohidrat", "SO3": 42.9, "Water Soluble Zn": 35.0},
+    {"Kod": "10100036", "Ad": "Demir Edta %13", "Water Soluble Fe": 13.0},
+    {"Kod": "10100037", "Ad": "Demir Sülfat Heptahidrat", "SO3": 27.3, "Water Soluble Fe": 19.0},
+    {"Kod": "10100038", "Ad": "Demir Sülfat Monohidrat", "SO3": 40.1, "Water Soluble Fe": 28.0},
+    {"Kod": "10100055", "Ad": "Fosforik Asit", "Total P2O5": 61.0},
+    {"Kod": "10100056", "Ad": "Fosforoz Asit", "Total P2O5": 85.0},
+    {"Kod": "10100066", "Ad": "Kalsiyum Nitrat", "Total N": 15.5, "NO3-N": 14.5, "CaO": 26.5},
+    {"Kod": "10100078", "Ad": "Magnezyum Nitrat", "Total N": 10.0, "NO3-N": 10.0, "MgO": 15.0},
+    {"Kod": "10100083", "Ad": "Magnezyum Sülfat Heptahidrat", "MgO": 15.0, "SO3": 30.0},
+    {"Kod": "10100089", "Ad": "Mangan Sülfat Monohidrat", "SO3": 46.6, "Water Soluble Mn": 32.0},
+    {"Kod": "10100090", "Ad": "MAP (Mono Amonyum Fosfat)", "Total N": 12.0, "NH4-N": 12.0, "Total P2O5": 61.0},
+    {"Kod": "10100098", "Ad": "MKP (Mono Potasyum Fosfat)", "Total P2O5": 52.0, "K2O": 34.0},
+    {"Kod": "10100118", "Ad": "Potasyum Hidroksit (Flake)", "K2O": 75.0},
+    {"Kod": "10100123", "Ad": "Potasyum Nitrat (LP)", "Total N": 13.0, "NO3-N": 13.0, "K2O": 46.0},
+    {"Kod": "10100126", "Ad": "Potasyum Sülfat", "K2O": 51.0, "SO3": 43.0, "S": 17.4},
+    {"Kod": "10100128", "Ad": "Protein Hidrolizati 70", "Total N": 8.0, "Organic Matter": 55.0, "Free Aminoacids": 22.0},
+    {"Kod": "10100133", "Ad": "Sitrik Asit Anhidrat", "Organic Matter": 98.0},
+    {"Kod": "10100143", "Ad": "Su", "Total N": 0.0},
+    {"Kod": "10100161", "Ad": "Üre", "Total N": 46.0, "NH2-N": 46.0},
+    {"Kod": "kodu yok", "Ad": "Üre Fosfat", "Total N": 17.0, "NH2-N": 17.0, "Total P2O5": 44.0}
+]
+
+df_raw_db = pd.DataFrame(RAW_MATERIALS_DATA).fillna(0.0)
+HAMMADDELER_LISTESI = df_raw_db["Ad"].tolist()
+
 if "FORMULLER_DB" not in st.session_state:
     st.session_state["FORMULLER_DB"] = []
 
 # ==========================================
-# 2. HAMMADDELER KÜTÜPHANESİ (VERİTABANI)
-# ==========================================
-HAMMADDELER_LISTESI = [
-    "Su (Deiyonize / Su)",
-    "Enzimatik Protein Hidrolizatı",
-    "Bitkisel Menşeli Amino Asit",
-    "Çinko Sülfat Monohidrat",
-    "Borik Asit",
-    "Mono Potasyum Fosfat (MKP)",
-    "Üre",
-    "Potasyum Hidroksit (KOH)",
-    "Sitrik Asit Anhidrit",
-    "EDDHA-Fe (%6 o-o)",
-    "Magnezyum Sülfat Heptahidrat",
-    "Mangan Sülfat Monohidrat",
-    "Humik Asit / Potasyum Humat",
-    "Fosforik Asit (%85)",
-    "Salisilik Asit",
-    "Sodyum Lignosülfonat",
-    "Surfaktan / Yayıcı Yapıştırıcı",
-    "Diğer / Özel İnce Kimyasal"
-]
-
-# ==========================================
-# 3. WORD BELGESİ OLUŞTURMA FONKSİYONU
-# ==========================================
-def generate_docx_document(doc_type, urun_adi, sistem_kod, firma, yogunluk, ph_degeri, df_data):
-    doc = Document()
-    
-    title = doc.add_paragraph()
-    title_run = title.add_run(f"{firma.upper()}\nLABORATORY QUALITY CONTROL & R&D DEPARTMENT")
-    title_run.bold = True
-    title_run.font.size = Pt(14)
-    title_run.font.color.rgb = RGBColor(16, 54, 92)
-    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    
-    doc.add_paragraph("----------------------------------------------------------------------------------------------------")
-    
-    subtitle = doc.add_paragraph()
-    sub_run = subtitle.add_run(f"DOCUMENT TYPE: {doc_type}")
-    sub_run.bold = True
-    sub_run.font.size = Pt(12)
-    
-    p_info = doc.add_paragraph()
-    p_info.add_run(f"Product Name: {urun_adi}\n").bold = True
-    p_info.add_run(f"System Code / Lot No: {sistem_kod}\n")
-    p_info.add_run(f"Density (d): {yogunluk:.3f} g/cm³\n")
-    p_info.add_run(f"pH (1/10): {ph_degeri:.1f}\n")
-    p_info.add_run(f"Date: {datetime.datetime.now().strftime('%d.%m.%Y')}\n")
-    
-    doc.add_heading("Formulation & Specification Data", level=2)
-    
-    table = doc.add_table(rows=1, cols=4)
-    table.style = 'Table Grid'
-    hdr_cells = table.rows[0].cells
-    hdr_cells[0].text = 'Component / Raw Material'
-    hdr_cells[1].text = 'w/w %'
-    hdr_cells[2].text = 'w/v %'
-    hdr_cells[3].text = 'g/L'
-    
-    for row in table.rows[0].cells:
-        for p in row.paragraphs:
-            for run in p.runs:
-                run.font.bold = True
-                
-    for idx, row in df_data.iterrows():
-        row_cells = table.add_row().cells
-        row_cells[0].text = str(row["Hammadde Adı"])
-        row_cells[1].text = f"{row['Miktar (% w/w)']:.2f}"
-        row_cells[2].text = f"{row['Miktar (% w/v)']:.2f}"
-        row_cells[3].text = f"{row['Miktar (g/L)']:.2f}"
-        
-    doc.add_paragraph("\nApproved by Head of Quality Control & R&D Laboratory")
-    
-    buffer = io.BytesIO()
-    doc.save(buffer)
-    buffer.seek(0)
-    return buffer
-
-# ==========================================
-# 4. ANA UYGULAMA VE YAN MENÜ
+# 3. YAN MENÜ
 # ==========================================
 st.sidebar.title(f"👤 Kullanıcı: {st.session_state['username']}")
 if st.sidebar.button("Güvenli Çıkış"):
@@ -133,11 +88,11 @@ secim = st.sidebar.radio("İşlem Modülü:", [
     "🧪 Formülasyon Tezgahı", 
     "📄 Belge Üretimi (CoA/CoC/SOP)", 
     "📚 Reçete Veritabanı (FORMULLER_DB)",
-    "🤖 Gemini AI Ar-Ge Asistanı"
+    "⚙️ Hammadde & Analiz Veritabanı"
 ])
 
 # ==========================================
-# MODÜL 1: FORMÜLASYON TEZGAHI & ANALİZ MOTORU
+# MODÜL 1: FORMÜLASYON TEZGAHI
 # ==========================================
 if secim == "🧪 Formülasyon Tezgahı":
     st.markdown("<h3 style='color:#10365C;'>🧪 Formülasyon Oluşturma & Analiz Tezgahı</h3>", unsafe_allow_html=True)
@@ -163,8 +118,8 @@ if secim == "🧪 Formülasyon Tezgahı":
     
     if "df_recipe" not in st.session_state:
         st.session_state["df_recipe"] = pd.DataFrame([
-            {"Hammadde Adı": "Su (Deiyonize / Su)", "Miktar (% w/w)": 45.00},
-            {"Hammadde Adı": "Enzimatik Protein Hidrolizatı", "Miktar (% w/w)": 30.00},
+            {"Hammadde Adı": "Su", "Miktar (% w/w)": 45.00},
+            {"Hammadde Adı": "Protein Hidrolizati 70", "Miktar (% w/w)": 30.00},
             {"Hammadde Adı": "Çinko Sülfat Monohidrat", "Miktar (% w/w)": 25.00}
         ])
 
@@ -190,143 +145,57 @@ if secim == "🧪 Formülasyon Tezgahı":
     
     toplam_w_w = edited_df["Miktar (% w/w)"].sum() if not edited_df.empty else 0.0
     
-    b1, b2 = st.columns([3, 1])
-    with b1:
-        if abs(toplam_w_w - 100.0) < 0.001:
-            st.success(f"✅ TOPLAM BİLEŞİM: %{toplam_w_w:.2f} (w/w) — Reçete Tamamlandı!")
-        elif toplam_w_w < 100.0:
-            st.warning(f"⚠️ TOPLAM BİLEŞİM: %{toplam_w_w:.2f} (w/w) — Kalan Eksik: %{100.0 - toplam_w_w:.2f}")
-        else:
-            st.error(f"❌ TOPLAM BİLEŞİM: %{toplam_w_w:.2f} (w/w) — Fazla Miktar: %{toplam_w_w - 100.0:.2f}")
+    if abs(toplam_w_w - 100.0) < 0.001:
+        st.success(f"✅ TOPLAM BİLEŞİM: %{toplam_w_w:.2f} (w/w) — Reçete Tamamlandı!")
+    elif toplam_w_w < 100.0:
+        st.warning(f"⚠️ TOPLAM BİLEŞİM: %{toplam_w_w:.2f} (w/w) — Kalan Eksik: %{100.0 - toplam_w_w:.2f}")
+    else:
+        st.error(f"❌ TOPLAM BİLEŞİM: %{toplam_w_w:.2f} (w/w) — Fazla Miktar: %{toplam_w_w - 100.0:.2f}")
 
-    zaman_kodu = datetime.datetime.now().strftime("%y%m%d-%H%M")
-    sistem_kod = f"{tip}-{zaman_kodu}R0"
-
+    # --- GARANTİ EDİLEN İÇERİK OTOMATİK HESAPLAMA MOTORU ---
     st.markdown("---")
-    st.write("##### 📊 Analiz Sonuç Tablosu (Otomatik Dönüştürülen Analiz Değerleri)")
+    st.write("##### 📊 Garanti Edilen İçerik / Hesaplanan Analiz Değerleri")
     
     if not edited_df.empty:
-        calc_df = edited_df.copy()
-        calc_df["Miktar (% w/v)"] = calc_df["Miktar (% w/w)"] * yogunluk
-        calc_df["Miktar (g/L)"] = calc_df["Miktar (% w/v)"] * 10
-
-        st.dataframe(
-            calc_df.style.format({
-                "Miktar (% w/w)": "{:.2f} %",
-                "Miktar (% w/v)": "{:.2f} %",
-                "Miktar (g/L)": "{:.2f} g/L"
-            }),
-            use_container_width=True
-        )
-
-        st.session_state["current_calc_df"] = calc_df
-        st.session_state["current_meta"] = {
-            "urun_adi": urun_adi,
-            "sistem_kod": sistem_kod,
-            "firma": firma,
-            "yogunluk": yogunluk,
-            "ph_degeri": ph_degeri,
-            "talep_no": talep_no
-        }
-
-    if st.button("💾 Formülü Onayla ve Veritabanına Kaydet", use_container_width=True):
-        st.session_state["FORMULLER_DB"].append({
-            "Kod": sistem_kod,
-            "Ürün Adı": urun_adi,
-            "Firma": firma,
-            "Yoğunluk": yogunluk,
-            "pH": ph_degeri,
-            "Tarih": datetime.datetime.now().strftime("%d.%m.%Y %H:%M"),
-            "Detay": calc_df
-        })
-        st.balloons()
-        st.success(f"Formülasyon Başarıyla `FORMULLER_DB` Veritabanına Kaydedildi! | **Kod:** `{sistem_kod}`")
-
-# ==========================================
-# MODÜL 2: BELGE ÜRETİMİ
-# ==========================================
-elif secim == "📄 Belge Üretimi (CoA/CoC/SOP)":
-    st.markdown("<h3 style='color:#10365C;'>📄 Otomatik Belge & Analiz Sertifikası Üretici</h3>", unsafe_allow_html=True)
-    
-    if "current_calc_df" not in st.session_state:
-        st.info("⚠️ Henüz aktif bir formülasyon onaylanmadı. Lütfen önce **🧪 Formülasyon Tezgahı** sekmesinde bir reçete oluşturun.")
-    else:
-        meta = st.session_state["current_meta"]
-        calc_df = st.session_state["current_calc_df"]
-        
-        st.success(f"Aktif Formülasyon: **{meta['urun_adi']}** | Kod: `{meta['sistem_kod']}` | Marka: **{meta['firma']}**")
-        
-        doc_type = st.selectbox("Üretilecek Belge Türü", [
-            "CoA - Certificate of Analysis (Analiz Sertifikası)",
-            "CoC - Certificate of Conformity (Uygunluk Belgesi)",
-            "SOP - Standard Operating Procedure (Laboratuvar/Üretim Talimatı)"
-        ])
-        
-        if st.button("🚀 Word Belgesini Derle ve İndir", use_container_width=True):
-            word_file = generate_docx_document(
-                doc_type.split(" - ")[0],
-                meta["urun_adi"],
-                meta["sistem_kod"],
-                meta["firma"],
-                meta["yogunluk"],
-                meta["ph_degeri"],
-                calc_df
-            )
+        # Analiz Sütunlarını Hesapla
+        totals_ww = {}
+        for idx, row in edited_df.iterrows():
+            h_ad = row["Hammadde Adı"]
+            h_miktar = row["Miktar (% w/w)"]
             
-            file_name = f"{meta['firma'].split()[0]}_{doc_type.split(' - ')[0]}_{meta['urun_adi']}.docx"
+            # DB'den hammaddeyi bul
+            match = df_raw_db[df_raw_db["Ad"] == h_ad]
+            if not match.empty:
+                h_row = match.iloc[0]
+                for col in df_raw_db.columns:
+                    if col not in ["Kod", "Ad"]:
+                        val = float(h_row[col]) if col in h_row else 0.0
+                        if val > 0:
+                            contrib = (h_miktar * val) / 100.0
+                            totals_ww[col] = totals_ww.get(col, 0.0) + contrib
+
+        if totals_ww:
+            analysis_summary = []
+            for param, val_ww in totals_ww.items():
+                if val_ww > 0.001:
+                    val_wv = val_ww * yogunluk
+                    val_gl = val_wv * 10.0
+                    analysis_summary.append({
+                        "Analiz Parametresi": param,
+                        "w/w % (Ağırlıkça)": f"{val_ww:.2f} %",
+                        "w/v % (Hacimce)": f"{val_wv:.2f} %",
+                        "g/L (Derişim)": f"{val_gl:.2f} g/L"
+                    })
             
-            st.download_button(
-                label=f"📥 {file_name} Dosyasını Bilgisayara İndir",
-                data=word_file,
-                file_name=file_name,
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                use_container_width=True
-            )
+            df_analysis_out = pd.DataFrame(analysis_summary)
+            st.dataframe(df_analysis_out, use_container_width=True)
+        else:
+            st.info("Seçilen hammaddelerde tanımlı analiz değeri bulunmuyor.")
 
 # ==========================================
-# MODÜL 3: REÇETE VERİTABANI
+# MODÜL 4: HAMMADDE YÖNETİMİ
 # ==========================================
-elif secim == "📚 Reçete Veritabanı (FORMULLER_DB)":
-    st.markdown("<h3 style='color:#10365C;'>📚 Reçete Veritabanı & Arşiv Takibi</h3>", unsafe_allow_html=True)
-    
-    db = st.session_state["FORMULLER_DB"]
-    
-    if not db:
-        st.info("📂 Veritabanında henüz kayıtlı formül bulunmuyor. Formülasyon Tezgahı'nda reçete oluşturup kaydedebilirsiniz.")
-    else:
-        st.write(f"**Kayıtlı Toplam Formülasyon Sayısı:** {len(db)}")
-        
-        summary_data = []
-        for item in db:
-            summary_data.append({
-                "Sistem Kodu": item["Kod"],
-                "Ürün Adı": item["Ürün Adı"],
-                "Firma": item["Firma"],
-                "Yoğunluk (d)": item["Yoğunluk"],
-                "pH": item["pH"],
-                "Kayıt Tarihi": item["Tarih"]
-            })
-            
-        df_summary = pd.DataFrame(summary_data)
-        st.dataframe(df_summary, use_container_width=True)
-        
-        st.markdown("---")
-        secilen_kod = st.selectbox("Detayını İncelemek İstediğiniz Formülü Seçin:", df_summary["Sistem Kodu"])
-        
-        for item in db:
-            if item["Kod"] == secilen_kod:
-                st.write(f"##### 🔎 Reçete Detayı: {item['Ürün Adı']} (`{item['Kod']}`)")
-                st.dataframe(item["Detay"], use_container_width=True)
-
-# ==========================================
-# MODÜL 4: GEMINI AI ASİSTANI
-# ==========================================
-elif secim == "🤖 Gemini AI Ar-Ge Asistanı":
-    st.markdown("<h3 style='color:#10365C;'>🤖 Gemini AI Ar-Ge & Kimya Asistanı</h3>", unsafe_allow_html=True)
-    
-    st.write("Formülasyonlarınızın kimyasal uyumluluğu, hammadde ikameleri ve dozaj optimizasyonları için akıllı danışmanınız.")
-    
-    user_query = st.text_area("Ar-Ge / Kimya Sorunuzu Giriniz:", "Örn: Çinko sülfat ile amino asit şelatlama reaksiyonunda pH dengesini korumak için hangi tampon çözelti önerilir?")
-    
-    if st.button("🧠 Yapay Zekaya Danış", use_container_width=True):
-        st.info("💡 **Ar-Ge Danışmanı Yanıtı:**\n\nÇinko sülfat monohidrat ile amino asit kompleksleşmesinde pH 5.5 - 6.5 aralığı ideal stabiliteler sunar. Çökeltiyi önlemek için ortama %1-2 oranında Sitrik Asit eklenmesi şelat yapısını destekler.")
+elif secim == "⚙️ Hammadde & Analiz Veritabanı":
+    st.markdown("<h3 style='color:#10365C;'>⚙️ Hammadde & Analiz Değerleri Yönetim Paneli</h3>", unsafe_allow_html=True)
+    st.write("Bu panelden sistemdeki tüm hammaddeleri ve analiz oranlarını inceleyebilir, yeni hammaddeler ekleyebilirsiniz.")
+    st.dataframe(df_raw_db, use_container_width=True)
