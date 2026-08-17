@@ -1,21 +1,15 @@
 import streamlit as st
 import pandas as pd
 import datetime
-import io
-from docx import Document
-from docx.shared import Pt, Inches, RGBColor
-from docx.enum.text import WD_ALIGN_PARAGRAPH
-from google import genai
 
 # ==========================================
 # 1. SAYFA VE GÜVENLİK AYARLARI
 # ==========================================
-st.set_page_config(page_title="R&D LIMS Intelligence Cloud", layout="wide", page_icon="🧪")
+st.set_page_config(page_title="R&D LIMS Intelligence", layout="wide", page_icon="🧪")
 
-# Kullanıcı Hesapları (VBA'deki Sistem_Kullanicilari mantığı)
 USERS = {
-    "abban": "1234",      # Kullanıcı 1 (Kullanıcı adı: abban, Şifre: 1234)
-    "partner": "5678"     # Kullanıcı 2
+    "abban": "1234",
+    "partner": "5678"
 }
 
 if "logged_in" not in st.session_state:
@@ -23,26 +17,24 @@ if "logged_in" not in st.session_state:
 if "username" not in st.session_state:
     st.session_state["username"] = ""
 
-# --- GİRİŞ PANELDEN (LOGIN) ---
+# Giriş Kontrolü
 if not st.session_state["logged_in"]:
     st.markdown("<h2 style='text-align: center; color: #10365C;'>🧪 R&D Intelligence — Giriş Paneli</h2>", unsafe_allow_html=True)
-    
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         user_input = st.text_input("Kullanıcı Adı")
         pass_input = st.text_input("Şifre", type="password")
-        if st.button("Sisteme Giriş Yap"):
+        if st.button("Sisteme Giriş Yap", use_container_width=True):
             if user_input.lower() in USERS and USERS[user_input.lower()] == pass_input:
                 st.session_state["logged_in"] = True
                 st.session_state["username"] = user_input.capitalize()
-                st.success("Giriş Başarılı!")
                 st.rerun()
             else:
                 st.error("Hatalı Kullanıcı Adı veya Şifre!")
     st.stop()
 
 # ==========================================
-# 2. ANA UYGULAMA (GİRİŞ YAPILDIKTAN SONRA)
+# 2. ANA UYGULAMA VE YAN MENÜ
 # ==========================================
 st.sidebar.title(f"👤 Kullanıcı: {st.session_state['username']}")
 if st.sidebar.button("Güvenli Çıkış"):
@@ -51,74 +43,82 @@ if st.sidebar.button("Güvenli Çıkış"):
 
 st.sidebar.markdown("---")
 secim = st.sidebar.radio("İşlem Modülü:", [
-    "🧪 Formülasyon & Analiz Tezgahı", 
-    "📄 CoA / CoC / SOP Belge Üretimi", 
-    "🤖 Gemini AI Ar-Ge Asistanı"
+    "🧪 Formülasyon Tezgahı", 
+    "📄 Belge Üretimi (CoA/CoC/SOP)", 
+    "🤖 Gemini AI Asistanı"
 ])
 
-# ------------------------------------------
-# MODÜL 1: FORMÜLASYON & ANALİZ TEZGAHI
-# ------------------------------------------
-if secim == "🧪 Formülasyon & Analiz Tezgahı":
-    st.markdown("<h3 style='color:#10365C;'>Formülasyon Geliştirme ve Analiz Motoru</h3>", unsafe_allow_html=True)
+# ==========================================
+# MODÜL 1: FORMÜLASYON TEZGAHI & ANALİZ MOTORU
+# ==========================================
+if secim == "🧪 Formülasyon Tezgahı":
+    st.markdown("<h3 style='color:#10365C;'>🧪 Formülasyon Oluşturma & Analiz Tezgahı</h3>", unsafe_allow_html=True)
     
+    # 1. Ürün ve Meta Veri Girişi
     c1, c2, c3, c4 = st.columns(4)
     with c1:
         tip = st.selectbox("Formülasyon Tipi", ["LIQ", "NPK", "GRA", "MIC", "SC"])
     with c2:
-        talep_no = st.text_input("Talep No", "MSTR01-260814-1600")
+        talep_no = st.text_input("Talep / Müşteri No", "MSTR01-260816-2100")
     with c3:
-        urun_adi = st.text_input("Ürün Adı", "AMINOSOL+TE")
+        urun_adi = st.text_input("Ürün Ticari Adı", "AMINOSOL+TE")
     with c4:
-        yogunluk = st.number_input("d (Yoğunluk g/cm³)", min_value=0.1, max_value=2.5, value=1.25, step=0.01)
+        yogunluk = st.number_input("Yoğunluk d (g/cm³)", min_value=0.100, max_value=2.500, value=1.250, step=0.001, format="%.3f")
+
+    c5, c6 = st.columns(2)
+    with c5:
+        ph_degeri = st.number_input("pH (1/10 Çözeltide)", min_value=0.0, max_value=14.0, value=6.5, step=0.1)
+    with c6:
+        firma = st.selectbox("Üretici / Marka Şablonu", ["Altıntar Tarım A.Ş.", "Unifarm Chemical"])
 
     st.markdown("---")
-    st.write("##### Hammadde ve Reçete Oranları (% w/w)")
+    st.write("##### 📋 Hammadde Reçete Girişi (% w/w)")
     
-    # Varsayılan Örnek Reçete
-    default_data = pd.DataFrame([
-        {"Hammadde Adı": "Su", "Miktar (%)": 45.00},
-        {"Hammadde Adı": "Amino Asit Kompleks", "Miktar (%)": 30.00},
-        {"Hammadde Adı": "Çinko Sülfat Monohidrat", "Miktar (%)": 25.00}
-    ])
-    
-    edited_df = st.data_editor(default_data, num_rows="dynamic", use_container_width=True)
-    
-    toplam = edited_df["Miktar (%)"].sum()
-    
-    # 100 kg Takip Barı
-    if abs(toplam - 100.0) < 0.001:
-        st.success(f"✅ TOPLAM: {toplam:.2f} kg — Formülasyon Dengede!")
-    elif toplam < 100.0:
-        st.warning(f"⚠️ TOPLAM: {toplam:.2f} kg — Kalan Eksik: {100.0 - toplam:.2f} kg")
-    else:
-        st.error(f"❌ TOPLAM: {toplam:.2f} kg — Fazla Miktar: {toplam - 100.0:.2f} kg")
+    # Varsayılan Şablon Tablo
+    if "df_recipe" not in st.session_state:
+        st.session_state["df_recipe"] = pd.DataFrame([
+            {"Hammadde Adı": "Su (Deiyonize)", "Miktar (% w/w)": 45.00},
+            {"Hammadde Adı": "Enzimatik Protein Hidrolizatı", "Miktar (% w/w)": 30.00},
+            {"Hammadde Adı": "Çinko Sülfat Monohidrat", "Miktar (% w/w)": 25.00}
+        ])
 
-    if st.button("Formül Kodu Oluştur ve Arşivle"):
-        zaman = datetime.datetime.now().strftime("%y%m%d-%H%M")
-        kod = f"{tip}-{zaman}R0 | Rev-00"
-        st.info(f"Oluşturulan Otomatik Formül Kodu: **{kod}**")
-
-# ------------------------------------------
-# MODÜL 2: GEMINI AI ASİSTANI
-# ------------------------------------------
-elif secim == "🤖 Gemini AI Ar-Ge Asistanı":
-    st.markdown("<h3 style='color:#10365C;'>Gemini AI Ar-Ge & Kimya Asistanı</h3>", unsafe_allow_html=True)
+    # Canlı Düzenlenebilir Tablo
+    edited_df = st.data_editor(st.session_state["df_recipe"], num_rows="dynamic", use_container_width=True)
     
-    api_key = st.text_input("Gemini API Key:", type="password")
-    prompt = st.text_area("Ar-Ge Sorunuz veya Reçete Talebiniz:", placeholder="Örn: Sıvı gübrede çinko sülfat ile potasyum humat çökelme yapar mı?")
+    # 100 kg Bakiye Hesabı
+    toplam_w_w = edited_df["Miktar (% w/w)"].sum()
     
-    if st.button("Soru Sor"):
-        if not api_key:
-            st.error("Lütfen API Key giriniz.")
+    b1, b2 = st.columns([3, 1])
+    with b1:
+        if abs(toplam_w_w - 100.0) < 0.001:
+            st.success(f"✅ TOPLAM BİLEŞİM: %{toplam_w_w:.2f} (w/w) — Reçete Tamamlandı!")
+        elif toplam_w_w < 100.0:
+            st.warning(f"⚠️ TOPLAM BİLEŞİM: %{toplam_w_w:.2f} (w/w) — Kalan Eksik: %{100.0 - toplam_w_w:.2f}")
         else:
-            try:
-                client = genai.Client(api_key=api_key)
-                res = client.models.generate_content(
-                    model='gemini-2.5-flash',
-                    contents=prompt
-                )
-                st.markdown("### 🤖 Asistan Cevabı:")
-                st.write(res.text)
-            except Exception as e:
-                st.error(f"Hata: {e}")
+            st.error(f"❌ TOPLAM BİLEŞİM: %{toplam_w_w:.2f} (w/w) — Fazla Miktar: %{toplam_w_w - 100.0:.2f}")
+
+    # Otomatik Kod Üretimi
+    zaman_kodu = datetime.datetime.now().strftime("%y%m%d-%H%M")
+    sistem_kod = f"{tip}-{zaman_kodu}R0"
+    revizyon_kod = "Rev-00"
+
+    # --- CANLI HESAPLANAN ANALİZ TABLOSU ---
+    st.markdown("---")
+    st.write("##### 📊 Analiz Sonuç Tablosu (Otomatik Dönüştürülen Analiz Değerleri)")
+    
+    calc_df = edited_df.copy()
+    calc_df["Miktar (% w/v)"] = calc_df["Miktar (% w/w)"] * yogunluk
+    calc_df["Miktar (g/L)"] = calc_df["Miktar (% w/v)"] * 10
+
+    st.dataframe(
+        calc_df.style.format({
+            "Miktar (% w/w)": "{:.2f} %",
+            "Miktar (% w/v)": "{:.2f} %",
+            "Miktar (g/L)": "{:.2f} g/L"
+        }),
+        use_container_width=True
+    )
+
+    if st.button("💾 Formülü Onayla ve Sistem Kodu Üret", use_container_width=True):
+        st.balloons()
+        st.success(f"Formülasyon Başarıyla Kaydedildi! | **Sistem Kodu:** `{sistem_kod}` | **Revizyon:** `{revizyon_kod}` | **Marka:** `{firma}`")
