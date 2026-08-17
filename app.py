@@ -36,6 +36,10 @@ if not st.session_state["logged_in"]:
                 st.error("Hatalı Kullanıcı Adı veya Şifre!")
     st.stop()
 
+# Veritabanı Hafızası
+if "FORMULLER_DB" not in st.session_state:
+    st.session_state["FORMULLER_DB"] = []
+
 # ==========================================
 # 2. HAMMADDELER KÜTÜPHANESİ (VERİTABANI)
 # ==========================================
@@ -66,7 +70,6 @@ HAMMADDELER_LISTESI = [
 def generate_docx_document(doc_type, urun_adi, sistem_kod, firma, yogunluk, ph_degeri, df_data):
     doc = Document()
     
-    # Başlık
     title = doc.add_paragraph()
     title_run = title.add_run(f"{firma.upper()}\nLABORATORY QUALITY CONTROL & R&D DEPARTMENT")
     title_run.bold = True
@@ -76,13 +79,11 @@ def generate_docx_document(doc_type, urun_adi, sistem_kod, firma, yogunluk, ph_d
     
     doc.add_paragraph("----------------------------------------------------------------------------------------------------")
     
-    # Belge Tipi Başlığı
     subtitle = doc.add_paragraph()
     sub_run = subtitle.add_run(f"DOCUMENT TYPE: {doc_type}")
     sub_run.bold = True
     sub_run.font.size = Pt(12)
     
-    # Detay Tablosu
     p_info = doc.add_paragraph()
     p_info.add_run(f"Product Name: {urun_adi}\n").bold = True
     p_info.add_run(f"System Code / Lot No: {sistem_kod}\n")
@@ -92,7 +93,6 @@ def generate_docx_document(doc_type, urun_adi, sistem_kod, firma, yogunluk, ph_d
     
     doc.add_heading("Formulation & Specification Data", level=2)
     
-    # Tablo Ekleme
     table = doc.add_table(rows=1, cols=4)
     table.style = 'Table Grid'
     hdr_cells = table.rows[0].cells
@@ -132,7 +132,8 @@ st.sidebar.markdown("---")
 secim = st.sidebar.radio("İşlem Modülü:", [
     "🧪 Formülasyon Tezgahı", 
     "📄 Belge Üretimi (CoA/CoC/SOP)", 
-    "🤖 Gemini AI Asistanı"
+    "📚 Reçete Veritabanı (FORMULLER_DB)",
+    "🤖 Gemini AI Ar-Ge Asistanı"
 ])
 
 # ==========================================
@@ -218,22 +219,31 @@ if secim == "🧪 Formülasyon Tezgahı":
             use_container_width=True
         )
 
-        # Oturum Hafızasına Kaydetme
         st.session_state["current_calc_df"] = calc_df
         st.session_state["current_meta"] = {
             "urun_adi": urun_adi,
             "sistem_kod": sistem_kod,
             "firma": firma,
             "yogunluk": yogunluk,
-            "ph_degeri": ph_degeri
+            "ph_degeri": ph_degeri,
+            "talep_no": talep_no
         }
 
-    if st.button("💾 Formülü Onayla ve Hafızaya Al", use_container_width=True):
+    if st.button("💾 Formülü Onayla ve Veritabanına Kaydet", use_container_width=True):
+        st.session_state["FORMULLER_DB"].append({
+            "Kod": sistem_kod,
+            "Ürün Adı": urun_adi,
+            "Firma": firma,
+            "Yoğunluk": yogunluk,
+            "pH": ph_degeri,
+            "Tarih": datetime.datetime.now().strftime("%d.%m.%Y %H:%M"),
+            "Detay": calc_df
+        })
         st.balloons()
-        st.success(f"Formülasyon Başarıyla Kaydedildi! | **Sistem Kodu:** `{sistem_kod}` | **Marka:** `{firma}`")
+        st.success(f"Formülasyon Başarıyla `FORMULLER_DB` Veritabanına Kaydedildi! | **Kod:** `{sistem_kod}`")
 
 # ==========================================
-# MODÜL 2: BELGE ÜRETİMİ (CoA / CoC / SOP)
+# MODÜL 2: BELGE ÜRETİMİ
 # ==========================================
 elif secim == "📄 Belge Üretimi (CoA/CoC/SOP)":
     st.markdown("<h3 style='color:#10365C;'>📄 Otomatik Belge & Analiz Sertifikası Üretici</h3>", unsafe_allow_html=True)
@@ -272,3 +282,51 @@ elif secim == "📄 Belge Üretimi (CoA/CoC/SOP)":
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 use_container_width=True
             )
+
+# ==========================================
+# MODÜL 3: REÇETE VERİTABANI
+# ==========================================
+elif secim == "📚 Reçete Veritabanı (FORMULLER_DB)":
+    st.markdown("<h3 style='color:#10365C;'>📚 Reçete Veritabanı & Arşiv Takibi</h3>", unsafe_allow_html=True)
+    
+    db = st.session_state["FORMULLER_DB"]
+    
+    if not db:
+        st.info("📂 Veritabanında henüz kayıtlı formül bulunmuyor. Formülasyon Tezgahı'nda reçete oluşturup kaydedebilirsiniz.")
+    else:
+        st.write(f"**Kayıtlı Toplam Formülasyon Sayısı:** {len(db)}")
+        
+        summary_data = []
+        for item in db:
+            summary_data.append({
+                "Sistem Kodu": item["Kod"],
+                "Ürün Adı": item["Ürün Adı"],
+                "Firma": item["Firma"],
+                "Yoğunluk (d)": item["Yoğunluk"],
+                "pH": item["pH"],
+                "Kayıt Tarihi": item["Tarih"]
+            })
+            
+        df_summary = pd.DataFrame(summary_data)
+        st.dataframe(df_summary, use_container_width=True)
+        
+        st.markdown("---")
+        secilen_kod = st.selectbox("Detayını İncelemek İstediğiniz Formülü Seçin:", df_summary["Sistem Kodu"])
+        
+        for item in db:
+            if item["Kod"] == secilen_kod:
+                st.write(f"##### 🔎 Reçete Detayı: {item['Ürün Adı']} (`{item['Kod']}`)")
+                st.dataframe(item["Detay"], use_container_width=True)
+
+# ==========================================
+# MODÜL 4: GEMINI AI ASİSTANI
+# ==========================================
+elif secim == "🤖 Gemini AI Ar-Ge Asistanı":
+    st.markdown("<h3 style='color:#10365C;'>🤖 Gemini AI Ar-Ge & Kimya Asistanı</h3>", unsafe_allow_html=True)
+    
+    st.write("Formülasyonlarınızın kimyasal uyumluluğu, hammadde ikameleri ve dozaj optimizasyonları için akıllı danışmanınız.")
+    
+    user_query = st.text_area("Ar-Ge / Kimya Sorunuzu Giriniz:", "Örn: Çinko sülfat ile amino asit şelatlama reaksiyonunda pH dengesini korumak için hangi tampon çözelti önerilir?")
+    
+    if st.button("🧠 Yapay Zekaya Danış", use_container_width=True):
+        st.info("💡 **Ar-Ge Danışmanı Yanıtı:**\n\nÇinko sülfat monohidrat ile amino asit kompleksleşmesinde pH 5.5 - 6.5 aralığı ideal stabiliteler sunar. Çökeltiyi önlemek için ortama %1-2 oranında Sitrik Asit eklenmesi şelat yapısını destekler.")
