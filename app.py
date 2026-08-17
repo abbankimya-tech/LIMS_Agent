@@ -34,7 +34,31 @@ if not st.session_state["logged_in"]:
     st.stop()
 
 # ==========================================
-# 2. ANA UYGULAMA VE YAN MENÜ
+# 2. HAMMADDELER KÜTÜPHANESİ (VERİTABANI)
+# ==========================================
+HAMMADDELER_LISTESI = [
+    "Su (Deiyonize / Su)",
+    "Enzimatik Protein Hidrolizatı",
+    "Bitkisel Menşeli Amino Asit",
+    "Çinko Sülfat Monohidrat",
+    "Borik Asit",
+    "Mono Potasyum Fosfat (MKP)",
+    "Üre",
+    "Potasyum Hidroksit (KOH)",
+    "Sitrik Asit Anhidrit",
+    "EDDHA-Fe (%6 o-o)",
+    "Magnezyum Sülfat Heptahidrat",
+    "Mangan Sülfat Monohidrat",
+    "Humik Asit / Potasyum Humat",
+    "Fosforik Asit (%85)",
+    "Salisilik Asit",
+    "Sodyum Lignosülfonat",
+    "Surfaktan / Yayıcı Yapıştırıcı",
+    "Diğer / Özel İnce Kimyasal"
+]
+
+# ==========================================
+# 3. ANA UYGULAMA VE YAN MENÜ
 # ==========================================
 st.sidebar.title(f"👤 Kullanıcı: {st.session_state['username']}")
 if st.sidebar.button("Güvenli Çıkış"):
@@ -54,7 +78,7 @@ secim = st.sidebar.radio("İşlem Modülü:", [
 if secim == "🧪 Formülasyon Tezgahı":
     st.markdown("<h3 style='color:#10365C;'>🧪 Formülasyon Oluşturma & Analiz Tezgahı</h3>", unsafe_allow_html=True)
     
-    # 1. Ürün ve Meta Veri Girişi
+    # 1. Ürün Başlık Verileri
     c1, c2, c3, c4 = st.columns(4)
     with c1:
         tip = st.selectbox("Formülasyon Tipi", ["LIQ", "NPK", "GRA", "MIC", "SC"])
@@ -77,16 +101,36 @@ if secim == "🧪 Formülasyon Tezgahı":
     # Varsayılan Şablon Tablo
     if "df_recipe" not in st.session_state:
         st.session_state["df_recipe"] = pd.DataFrame([
-            {"Hammadde Adı": "Su (Deiyonize)", "Miktar (% w/w)": 45.00},
+            {"Hammadde Adı": "Su (Deiyonize / Su)", "Miktar (% w/w)": 45.00},
             {"Hammadde Adı": "Enzimatik Protein Hidrolizatı", "Miktar (% w/w)": 30.00},
             {"Hammadde Adı": "Çinko Sülfat Monohidrat", "Miktar (% w/w)": 25.00}
         ])
 
-    # Canlı Düzenlenebilir Tablo
-    edited_df = st.data_editor(st.session_state["df_recipe"], num_rows="dynamic", use_container_width=True)
+    # Canlı Düzenlenebilir Tablo (Açılır Liste Hammadde Seçimi İle)
+    edited_df = st.data_editor(
+        st.session_state["df_recipe"],
+        num_rows="dynamic",
+        use_container_width=True,
+        column_config={
+            "Hammadde Adı": st.column_config.SelectboxColumn(
+                "Hammadde Adı",
+                help="Reçeteye eklenecek hammaddeyi seçiniz",
+                options=HAMMADDELER_LISTESI,
+                required=True
+            ),
+            "Miktar (% w/w)": st.column_config.NumberColumn(
+                "Miktar (% w/w)",
+                help="Ağırlıkça yüzde oranı",
+                min_value=0.0,
+                max_value=100.0,
+                step=0.1,
+                format="%.2f %%"
+            )
+        }
+    )
     
-    # 100 kg Bakiye Hesabı
-    toplam_w_w = edited_df["Miktar (% w/w)"].sum()
+    # 100 kg Bakiye Kontrolü
+    toplam_w_w = edited_df["Miktar (% w/w)"].sum() if not edited_df.empty else 0.0
     
     b1, b2 = st.columns([3, 1])
     with b1:
@@ -106,18 +150,19 @@ if secim == "🧪 Formülasyon Tezgahı":
     st.markdown("---")
     st.write("##### 📊 Analiz Sonuç Tablosu (Otomatik Dönüştürülen Analiz Değerleri)")
     
-    calc_df = edited_df.copy()
-    calc_df["Miktar (% w/v)"] = calc_df["Miktar (% w/w)"] * yogunluk
-    calc_df["Miktar (g/L)"] = calc_df["Miktar (% w/v)"] * 10
+    if not edited_df.empty:
+        calc_df = edited_df.copy()
+        calc_df["Miktar (% w/v)"] = calc_df["Miktar (% w/w)"] * yogunluk
+        calc_df["Miktar (g/L)"] = calc_df["Miktar (% w/v)"] * 10
 
-    st.dataframe(
-        calc_df.style.format({
-            "Miktar (% w/w)": "{:.2f} %",
-            "Miktar (% w/v)": "{:.2f} %",
-            "Miktar (g/L)": "{:.2f} g/L"
-        }),
-        use_container_width=True
-    )
+        st.dataframe(
+            calc_df.style.format({
+                "Miktar (% w/w)": "{:.2f} %",
+                "Miktar (% w/v)": "{:.2f} %",
+                "Miktar (g/L)": "{:.2f} g/L"
+            }),
+            use_container_width=True
+        )
 
     if st.button("💾 Formülü Onayla ve Sistem Kodu Üret", use_container_width=True):
         st.balloons()
