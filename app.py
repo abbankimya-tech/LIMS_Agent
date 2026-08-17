@@ -1,6 +1,10 @@
 import streamlit as st
 import pandas as pd
 import datetime
+import io
+from docx import Document
+from docx.shared import Inches, Pt, RGBColor
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 # ==========================================
 # 1. SAYFA VE GÜVENLİK AYARLARI
@@ -17,7 +21,6 @@ if "logged_in" not in st.session_state:
 if "username" not in st.session_state:
     st.session_state["username"] = ""
 
-# Giriş Kontrolü
 if not st.session_state["logged_in"]:
     st.markdown("<h2 style='text-align: center; color: #10365C;'>🧪 R&D Intelligence — Giriş Paneli</h2>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -58,7 +61,67 @@ HAMMADDELER_LISTESI = [
 ]
 
 # ==========================================
-# 3. ANA UYGULAMA VE YAN MENÜ
+# 3. WORD BELGESİ OLUŞTURMA FONKSİYONU
+# ==========================================
+def generate_docx_document(doc_type, urun_adi, sistem_kod, firma, yogunluk, ph_degeri, df_data):
+    doc = Document()
+    
+    # Başlık
+    title = doc.add_paragraph()
+    title_run = title.add_run(f"{firma.upper()}\nLABORATORY QUALITY CONTROL & R&D DEPARTMENT")
+    title_run.bold = True
+    title_run.font.size = Pt(14)
+    title_run.font.color.rgb = RGBColor(16, 54, 92)
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    
+    doc.add_paragraph("----------------------------------------------------------------------------------------------------")
+    
+    # Belge Tipi Başlığı
+    subtitle = doc.add_paragraph()
+    sub_run = subtitle.add_run(f"DOCUMENT TYPE: {doc_type}")
+    sub_run.bold = True
+    sub_run.font.size = Pt(12)
+    
+    # Detay Tablosu
+    p_info = doc.add_paragraph()
+    p_info.add_run(f"Product Name: {urun_adi}\n").bold = True
+    p_info.add_run(f"System Code / Lot No: {sistem_kod}\n")
+    p_info.add_run(f"Density (d): {yogunluk:.3f} g/cm³\n")
+    p_info.add_run(f"pH (1/10): {ph_degeri:.1f}\n")
+    p_info.add_run(f"Date: {datetime.datetime.now().strftime('%d.%m.%Y')}\n")
+    
+    doc.add_heading("Formulation & Specification Data", level=2)
+    
+    # Tablo Ekleme
+    table = doc.add_table(rows=1, cols=4)
+    table.style = 'Table Grid'
+    hdr_cells = table.rows[0].cells
+    hdr_cells[0].text = 'Component / Raw Material'
+    hdr_cells[1].text = 'w/w %'
+    hdr_cells[2].text = 'w/v %'
+    hdr_cells[3].text = 'g/L'
+    
+    for row in table.rows[0].cells:
+        for p in row.paragraphs:
+            for run in p.runs:
+                run.font.bold = True
+                
+    for idx, row in df_data.iterrows():
+        row_cells = table.add_row().cells
+        row_cells[0].text = str(row["Hammadde Adı"])
+        row_cells[1].text = f"{row['Miktar (% w/w)']:.2f}"
+        row_cells[2].text = f"{row['Miktar (% w/v)']:.2f}"
+        row_cells[3].text = f"{row['Miktar (g/L)']:.2f}"
+        
+    doc.add_paragraph("\nApproved by Head of Quality Control & R&D Laboratory")
+    
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer
+
+# ==========================================
+# 4. ANA UYGULAMA VE YAN MENÜ
 # ==========================================
 st.sidebar.title(f"👤 Kullanıcı: {st.session_state['username']}")
 if st.sidebar.button("Güvenli Çıkış"):
@@ -78,7 +141,6 @@ secim = st.sidebar.radio("İşlem Modülü:", [
 if secim == "🧪 Formülasyon Tezgahı":
     st.markdown("<h3 style='color:#10365C;'>🧪 Formülasyon Oluşturma & Analiz Tezgahı</h3>", unsafe_allow_html=True)
     
-    # 1. Ürün Başlık Verileri
     c1, c2, c3, c4 = st.columns(4)
     with c1:
         tip = st.selectbox("Formülasyon Tipi", ["LIQ", "NPK", "GRA", "MIC", "SC"])
@@ -98,7 +160,6 @@ if secim == "🧪 Formülasyon Tezgahı":
     st.markdown("---")
     st.write("##### 📋 Hammadde Reçete Girişi (% w/w)")
     
-    # Varsayılan Şablon Tablo
     if "df_recipe" not in st.session_state:
         st.session_state["df_recipe"] = pd.DataFrame([
             {"Hammadde Adı": "Su (Deiyonize / Su)", "Miktar (% w/w)": 45.00},
@@ -106,7 +167,6 @@ if secim == "🧪 Formülasyon Tezgahı":
             {"Hammadde Adı": "Çinko Sülfat Monohidrat", "Miktar (% w/w)": 25.00}
         ])
 
-    # Canlı Düzenlenebilir Tablo (Açılır Liste Hammadde Seçimi İle)
     edited_df = st.data_editor(
         st.session_state["df_recipe"],
         num_rows="dynamic",
@@ -114,13 +174,11 @@ if secim == "🧪 Formülasyon Tezgahı":
         column_config={
             "Hammadde Adı": st.column_config.SelectboxColumn(
                 "Hammadde Adı",
-                help="Reçeteye eklenecek hammaddeyi seçiniz",
                 options=HAMMADDELER_LISTESI,
                 required=True
             ),
             "Miktar (% w/w)": st.column_config.NumberColumn(
                 "Miktar (% w/w)",
-                help="Ağırlıkça yüzde oranı",
                 min_value=0.0,
                 max_value=100.0,
                 step=0.1,
@@ -129,7 +187,6 @@ if secim == "🧪 Formülasyon Tezgahı":
         }
     )
     
-    # 100 kg Bakiye Kontrolü
     toplam_w_w = edited_df["Miktar (% w/w)"].sum() if not edited_df.empty else 0.0
     
     b1, b2 = st.columns([3, 1])
@@ -141,12 +198,9 @@ if secim == "🧪 Formülasyon Tezgahı":
         else:
             st.error(f"❌ TOPLAM BİLEŞİM: %{toplam_w_w:.2f} (w/w) — Fazla Miktar: %{toplam_w_w - 100.0:.2f}")
 
-    # Otomatik Kod Üretimi
     zaman_kodu = datetime.datetime.now().strftime("%y%m%d-%H%M")
     sistem_kod = f"{tip}-{zaman_kodu}R0"
-    revizyon_kod = "Rev-00"
 
-    # --- CANLI HESAPLANAN ANALİZ TABLOSU ---
     st.markdown("---")
     st.write("##### 📊 Analiz Sonuç Tablosu (Otomatik Dönüştürülen Analiz Değerleri)")
     
@@ -164,6 +218,57 @@ if secim == "🧪 Formülasyon Tezgahı":
             use_container_width=True
         )
 
-    if st.button("💾 Formülü Onayla ve Sistem Kodu Üret", use_container_width=True):
+        # Oturum Hafızasına Kaydetme
+        st.session_state["current_calc_df"] = calc_df
+        st.session_state["current_meta"] = {
+            "urun_adi": urun_adi,
+            "sistem_kod": sistem_kod,
+            "firma": firma,
+            "yogunluk": yogunluk,
+            "ph_degeri": ph_degeri
+        }
+
+    if st.button("💾 Formülü Onayla ve Hafızaya Al", use_container_width=True):
         st.balloons()
-        st.success(f"Formülasyon Başarıyla Kaydedildi! | **Sistem Kodu:** `{sistem_kod}` | **Revizyon:** `{revizyon_kod}` | **Marka:** `{firma}`")
+        st.success(f"Formülasyon Başarıyla Kaydedildi! | **Sistem Kodu:** `{sistem_kod}` | **Marka:** `{firma}`")
+
+# ==========================================
+# MODÜL 2: BELGE ÜRETİMİ (CoA / CoC / SOP)
+# ==========================================
+elif secim == "📄 Belge Üretimi (CoA/CoC/SOP)":
+    st.markdown("<h3 style='color:#10365C;'>📄 Otomatik Belge & Analiz Sertifikası Üretici</h3>", unsafe_allow_html=True)
+    
+    if "current_calc_df" not in st.session_state:
+        st.info("⚠️ Henüz aktif bir formülasyon onaylanmadı. Lütfen önce **🧪 Formülasyon Tezgahı** sekmesinde bir reçete oluşturun.")
+    else:
+        meta = st.session_state["current_meta"]
+        calc_df = st.session_state["current_calc_df"]
+        
+        st.success(f"Aktif Formülasyon: **{meta['urun_adi']}** | Kod: `{meta['sistem_kod']}` | Marka: **{meta['firma']}**")
+        
+        doc_type = st.selectbox("Üretilecek Belge Türü", [
+            "CoA - Certificate of Analysis (Analiz Sertifikası)",
+            "CoC - Certificate of Conformity (Uygunluk Belgesi)",
+            "SOP - Standard Operating Procedure (Laboratuvar/Üretim Talimatı)"
+        ])
+        
+        if st.button("🚀 Word Belgesini Derle ve İndir", use_container_width=True):
+            word_file = generate_docx_document(
+                doc_type.split(" - ")[0],
+                meta["urun_adi"],
+                meta["sistem_kod"],
+                meta["firma"],
+                meta["yogunluk"],
+                meta["ph_degeri"],
+                calc_df
+            )
+            
+            file_name = f"{meta['firma'].split()[0]}_{doc_type.split(' - ')[0]}_{meta['urun_adi']}.docx"
+            
+            st.download_button(
+                label=f"📥 {file_name} Dosyasını Bilgisayara İndir",
+                data=word_file,
+                file_name=file_name,
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                use_container_width=True
+            )
