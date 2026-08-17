@@ -49,7 +49,7 @@ MUSTERI_DATA = [
     {"Musteri": "BioPlant SRL", "Kod": "BIO03", "Ulke": "İtalya"}
 ]
 
-# TALEPLER Veritabanı İlklendirme
+# TALEPLER Veritabanı
 if "TALEPLER_DB" not in st.session_state:
     st.session_state["TALEPLER_DB"] = pd.DataFrame([
         {
@@ -84,7 +84,7 @@ if "FORMULLER_DB" not in st.session_state:
 
 # Active Talep Transfer Hafızası
 if "active_talep_no" not in st.session_state:
-    st.session_state["active_talep_no"] = "MSTR01-260817-2100"
+    st.session_state["active_talep_no"] = "AGRO01-260817-1030"
 if "active_urun_adi" not in st.session_state:
     st.session_state["active_urun_adi"] = "AMINOSOL+TE"
 
@@ -116,7 +116,7 @@ df_raw_db = st.session_state["df_raw_db"]
 HAMMADDELER_LISTESI = df_raw_db["Ad"].dropna().tolist()
 
 # ==========================================
-# 3. YAN MENÜ VE GEZİNTİ
+# 3. YAN MENÜ
 # ==========================================
 st.sidebar.title(f"👤 Kullanıcı: {st.session_state['username']}")
 if st.sidebar.button("Güvenli Çıkış"):
@@ -124,7 +124,6 @@ if st.sidebar.button("Güvenli Çıkış"):
     st.rerun()
 
 st.sidebar.markdown("---")
-# TALEPLER EN BAŞTA OLABİLECEK ŞEKİLDE SIRALANDI
 secim = st.sidebar.radio("İşlem Modülü:", [
     "📋 Talepler Yönetimi",
     "🧪 Formülasyon Tezgahı", 
@@ -134,26 +133,22 @@ secim = st.sidebar.radio("İşlem Modülü:", [
 ])
 
 # ==========================================
-# MODÜL 0: TALEPLER YÖNETİMİ (EN BAŞTA)
+# MODÜL 0: TALEPLER YÖNETİMİ
 # ==========================================
 if secim == "📋 Talepler Yönetimi":
     st.markdown("<h3 style='color:#10365C;'>📋 Müşteri Talepleri ve Ar-Ge Süreç Takibi</h3>", unsafe_allow_html=True)
     
-    # 1. Yeni Talep Girişi (Expander Form)
     with st.expander("➕ Yeni Talep Oluştur (Müşteri Talebi Ekle)", expanded=False):
         c1, c2, c3 = st.columns(3)
         with c1:
             musteri_isimleri = [m["Musteri"] for m in MUSTERI_DATA]
             secilen_musteri = st.selectbox("Müşteri / Firma Seçiniz", musteri_isimleri)
-            
-            # Otomatik Bilgi Çekme (MÜŞTERİ_DATA'dan)
             m_info = next((m for m in MUSTERI_DATA if m["Musteri"] == secilen_musteri), {"Kod": "MSTR01", "Ulke": "Türkiye"})
             m_kod = m_info["Kod"]
             m_ulke = m_info["Ulke"]
             
         with c2:
             st.text_input("Ülke", value=m_ulke, disabled=True)
-            # Otomatik Kod Üretici: MUSTERIKODU-YYMMDD-HHMM
             zaman_str = datetime.datetime.now().strftime("%y%m%d-%H%M")
             otomatik_talep_no = f"{m_kod}-{zaman_str}"
             st.text_input("Üretilen Otomatik Talep No", value=otomatik_talep_no, disabled=True)
@@ -182,16 +177,12 @@ if secim == "📋 Talepler Yönetimi":
                 "Açıklama / Notlar": aciklama
             }
             st.session_state["TALEPLER_DB"] = pd.concat([pd.DataFrame([yeni_satir]), st.session_state["TALEPLER_DB"]], ignore_index=True)
-            st.success(f"✅ Talep Başarıyla Kaydedildi! | **Talep No:** `{otomatik_talep_no}`")
-            st.rerun()
+            st.success(f"✅ Talep Kaydedildi! Kod: `{otomatik_talep_no}`")
 
     st.markdown("---")
     st.write("##### 📊 Mevcut Müşteri Talepleri Listesi")
     
-    # Filtreleme ve Tablo
     df_talepler = st.session_state["TALEPLER_DB"]
-    
-    # Canlı Tablo Gösterimi
     st.dataframe(df_talepler, use_container_width=True)
     
     st.markdown("---")
@@ -205,13 +196,10 @@ if secim == "📋 Talepler Yönetimi":
             st.write("")
             st.write("")
             if st.button("🚀 Bu Talebi Formüle Et", use_container_width=True):
-                # Seçilen talebin ürün ismini bul
                 row_match = df_talepler[df_talepler["Talep No"] == secilen_t_no].iloc[0]
-                
                 st.session_state["active_talep_no"] = secilen_t_no
                 st.session_state["active_urun_adi"] = row_match["Ürün İsmi"]
-                
-                st.success(f"Talep `# {secilen_t_no}` Formülasyon Tezgahına aktarıldı! Lütfen sol menüden **🧪 Formülasyon Tezgahı** sekmesine geçiniz.")
+                st.success(f"✅ `# {secilen_t_no}` Formülasyon Tezgahına aktarıldı! Sol menüden **🧪 Formülasyon Tezgahı** sekmesine geçebilirsiniz.")
 
 # ==========================================
 # MODÜL 1: FORMÜLASYON TEZGAHI
@@ -219,8 +207,7 @@ if secim == "📋 Talepler Yönetimi":
 elif secim == "🧪 Formülasyon Tezgahı":
     st.markdown("<h3 style='color:#10365C;'>🧪 Formülasyon Oluşturma & Analiz Tezgahı</h3>", unsafe_allow_html=True)
     
-    # Aktif Talepten Veri Çekme
-    default_talep = st.session_state.get("active_talep_no", "MSTR01-260817-2100")
+    default_talep = st.session_state.get("active_talep_no", "AGRO01-260817-1030")
     default_urun = st.session_state.get("active_urun_adi", "AMINOSOL+TE")
     
     st.info(f"📌 **Aktif Çalışılan Talep:** `{default_talep}` | **Ürün:** `{default_urun}`")
@@ -278,7 +265,7 @@ elif secim == "🧪 Formülasyon Tezgahı":
     elif toplam_w_w < 100.0:
         st.warning(f"⚠️ TOPLAM BİLEŞİM: %{toplam_w_w:.2f} (w/w) — Kalan Eksik: %{100.0 - toplam_w_w:.2f}")
     else:
-        st.error(f"❌ TOPLAM BİLEŞİM: %{toplam_w_w:.2f} (w/w) — Fazla Miktar: %{toplam_w_w - toplam_w_w:.2f}")
+        st.error(f"❌ TOPLAM BİLEŞİM: %{toplam_w_w:.2f} (w/w) — Fazla Miktar: %{toplam_w_w - 100.0:.2f}")
 
     # Garanti Edilen İçerik Motoru
     st.markdown("---")
@@ -333,7 +320,6 @@ elif secim == "🧪 Formülasyon Tezgahı":
             }
 
     if st.button("💾 Formülü Onayla ve Arşive Kaydet", use_container_width=True):
-        # 1. Formülü veritabanına kaydet
         st.session_state["FORMULLER_DB"].append({
             "Kod": sistem_kod,
             "Ürün Adı": urun_adi,
@@ -344,7 +330,6 @@ elif secim == "🧪 Formülasyon Tezgahı":
             "Tarih": datetime.datetime.now().strftime("%d.%m.%Y %H:%M")
         })
         
-        # 2. TALEPLER_DB Durumunu Güncelle
         df_talepler = st.session_state["TALEPLER_DB"]
         idx_match = df_talepler[df_talepler["Talep No"] == talep_no].index
         if not idx_match.empty:
@@ -352,7 +337,7 @@ elif secim == "🧪 Formülasyon Tezgahı":
             st.session_state["TALEPLER_DB"].loc[idx_match[0], "Üretilen Kod"] = sistem_kod
 
         st.balloons()
-        st.success(f"Formülasyon Başarıyla Kaydedildi! | **Sistem Kodu:** `{sistem_kod}` | **Talep Durumu Güncellendi!**")
+        st.success(f"✅ Formülasyon Başarıyla Kaydedildi! | **Kod:** `{sistem_kod}`")
 
 # ==========================================
 # MODÜL 2: BELGE ÜRETİMİ
@@ -374,7 +359,7 @@ elif secim == "📄 Belge Üretimi (CoA/CoC/SOP)":
             "SOP - Standard Operating Procedure (Laboratuvar/Üretim Talimatı)"
         ])
         
-        st.warning("⚠️ **Geliştirme Notu:** Sayfa tasarımı ve kurumsal logo yerleşimi adım adım özelleştirilecektir.")
+        st.info("💡 **Geliştirme Notu:** Sayfa tasarımı ve kurumsal logo yerleşimi adım adım özelleştirilecektir.")
 
 # ==========================================
 # MODÜL 3: REÇETE VERİTABANI
@@ -401,4 +386,3 @@ elif secim == "⚙️ Hammadde & Analiz Veritabanı":
     if st.button("💾 Veritabanı Değişikliklerini Uygula & Kaydet", use_container_width=True):
         st.session_state["df_raw_db"] = updated_raw_db
         st.success("✅ Hammadde veritabanı başarıyla güncellendi!")
-        st.rerun()
